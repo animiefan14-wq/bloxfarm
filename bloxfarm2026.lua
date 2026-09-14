@@ -1,59 +1,75 @@
 --[[
-    Blox Fruits Auto-Farm — 2026 Update
+    Blox Fruits Auto-Farm — KAKU v4
     Android Executor Build
-    Author: KAKU for He
-    Max Level: 2800 (Third Sea endgame)
+    Author: made by kairo.v4
+    Max Level: 2800
     Loadstring-ready
 --]]
 
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local UserInputService  = game:GetService("UserInputService")
-local TweenService      = game:GetService("TweenService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local StarterGui        = game:GetService("StarterGui")
+local Players              = game:GetService("Players")
+local RunService           = game:GetService("RunService")
+local UserInputService     = game:GetService("UserInputService")
+local TweenService         = game:GetService("TweenService")
+local VirtualInputManager  = game:GetService("VirtualInputManager")
+local StarterGui           = game:GetService("StarterGui")
+local ReplicatedStorage    = game:GetService("ReplicatedStorage")
 
-local LP = Players.LocalPlayer
+local LP     = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
+local CommF  = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 
 -- ═══════════════════════════════════════════════
 -- CONFIG
 -- ═══════════════════════════════════════════════
 local Config = {
     AttackStyle       = "Melee",
-    AutoClickDelay    = 0.08,
-    SkillCooldowns    = true,
+    AttackDelay       = 0.12,
     BringMobs         = true,
     BringRadius       = 140,
-    FarmRadius        = 70,
+    TargetMode        = "Nearest",   -- "Nearest" | "Lowest HP" | "Player"
 
     -- Movement
-    BaseWalkSpeed     = 16,        -- restored when speed toggle is off
-    SpeedValue        = 120,       -- set when speed toggle on
+    BaseWalkSpeed     = 16,
+    SpeedValue        = 120,
+    SpeedOn           = false,
     WalkOnWater       = false,
     SafeTP            = true,
     TPOffset          = 6,
 
     -- Mass damage
-    MassDamage        = false,     -- server-trust hitbox expand
-    MassRange         = 30,        -- studs added to hitbox
+    MassDamage        = false,
+    MassRange         = 25,
 
     -- Quest
     AutoQuest         = true,
     AutoNextQuest     = true,
-    AutoMastery       = false,
+}
 
-    -- UI
-    UIOpen            = true,
-    Minimized         = false,
+local TeleportLocations = {
+    ["Starter Island"]     = Vector3.new(0, 10, 0),
+    ["Marine Fort"]        = Vector3.new(-2600, 20, 1500),
+    ["Kingdom of Rose"]    = Vector3.new(-400, 30, 3500),
+    ["Frost Island"]       = Vector3.new(1200, 30, -1200),
+    ["Desert Island"]      = Vector3.new(1000, 30, 2500),
+    ["Skylands"]           = Vector3.new(-800, 1000, -1800),
+    ["Fountain City"]      = Vector3.new(5200, 50, 3200),
+    ["Magma Village"]      = Vector3.new(-5000, 30, -3000),
+    ["Underwater City"]    = Vector3.new(-4000, -200, 5000),
+    ["Cursed Ship"]        = Vector3.new(900, 30, 3800),
+    ["Haunted Castle"]     = Vector3.new(-9500, 100, 5900),
+    ["Upper Skylands"]     = Vector3.new(-7800, 1500, -5500),
+    ["Hydra Island"]       = Vector3.new(5600, 60, -2200),
+    ["Great Tree"]         = Vector3.new(2700, 100, -500),
+    ["Castle on the Sea"]  = Vector3.new(-5000, 100, 3000),
+    ["Haunted Ship"]       = Vector3.new(-6500, 80, 4000),
+    ["Cake Land"]          = Vector3.new(-1200, 80, -1000),
+    ["Fishman Island"]     = Vector3.new(-3000, 50, -6000),
 }
 
 -- ═══════════════════════════════════════════════
--- QUEST DATA — 2026 PATCH
--- (First / Second / Third Sea, extended to 2800)
+-- QUEST DATA
 -- ═══════════════════════════════════════════════
 local QuestData = {
-    -- First Sea
     {lv=1,    mobs={"Bandit","Monkey"},                       island="Starter Island"},
     {lv=10,   mobs={"Monkey","Bandit [Lv. 5]"},               island="Starter Island"},
     {lv=15,   mobs={"The Musician"},                          island="Starter Island"},
@@ -64,13 +80,11 @@ local QuestData = {
     {lv=200,  mobs={"Sky Bandit","Dark Master"},              island="Skylands"},
     {lv=300,  mobs={"Military Soldier","Military Spy"},        island="Fountain City"},
     {lv=450,  mobs={"Magma Ninja","Lava Pirate"},             island="Magma Village"},
-    -- Second Sea
     {lv=625,  mobs={"Sea Soldier","Water Fighter"},           island="Underwater City"},
     {lv=750,  mobs={"Living Zombie","Demonic Soul"},          island="Cursed Ship"},
     {lv=1000, mobs={"Reborn Skeleton","Living Zombie"},       island="Haunted Castle"},
     {lv=1250, mobs={"Fighter","Sky Bandit"},                  island="Upper Skylands"},
     {lv=1500, mobs={"Dragon Crew Warrior","Dragon Crew Archer"}, island="Hydra Island"},
-    -- Third Sea (current era)
     {lv=1750, mobs={"Forest Pirate","Mythological Pirate"},   island="Great Tree"},
     {lv=2000, mobs={"Cursed Skeleton","Pirate Millionaire"},  island="Castle on the Sea"},
     {lv=2250, mobs={"Ghost","Ghost [Lv. 2100]"},              island="Haunted Ship"},
@@ -87,7 +101,6 @@ local QuestData = {
 -- ═══════════════════════════════════════════════
 local State = {
     Running      = false,
-    CurrentQuest = nil,
     Target       = nil,
     Session      = 0,
 }
@@ -108,14 +121,14 @@ local function getLevel()
     return ok and lv or 1
 end
 
-local function getHumanoid()
-    local c = LP.Character
-    return c and c:FindFirstChildOfClass("Humanoid") or nil
-end
-
 local function getRoot()
     local c = LP.Character
     return c and c:FindFirstChild("HumanoidRootPart") or nil
+end
+
+local function getHumanoid()
+    local c = LP.Character
+    return c and c:FindFirstChildOfClass("Humanoid") or nil
 end
 
 local function hasQuest()
@@ -135,7 +148,6 @@ local function applyWalkOnWater()
     if not hum then return end
 
     if Config.WalkOnWater then
-        -- Neutralize buoyancy by pushing humanoid state to Running on water
         hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
         local root = char:FindFirstChild("HumanoidRootPart")
         if root then
@@ -152,10 +164,27 @@ end
 local function applySpeed()
     local hum = getHumanoid()
     if not hum then return end
-    hum.WalkSpeed = Config.BaseWalkSpeed
-    -- When speed toggle is on, apply SpeedValue
-    if Config._SpeedOn then
-        hum.WalkSpeed = Config.SpeedValue
+    hum.WalkSpeed = Config.SpeedOn and Config.SpeedValue or Config.BaseWalkSpeed
+end
+
+-- ═══════════════════════════════════════════════
+-- TELEPORT
+-- ═══════════════════════════════════════════════
+local function teleportTo(pos)
+    local myRoot = getRoot()
+    if not myRoot then return end
+    if Config.SafeTP then
+        -- Staged jump to avoid instant-TP flags
+        local startPos = myRoot.Position
+        local steps = 8
+        for i = 1, steps do
+            local t = i / steps
+            local interp = startPos:Lerp(pos, t)
+            myRoot.CFrame = CFrame.new(interp)
+            task.wait(0.05)
+        end
+    else
+        myRoot.CFrame = CFrame.new(pos)
     end
 end
 
@@ -171,36 +200,66 @@ local function pickQuestForLevel(lv)
 end
 
 local function acceptQuest(questInfo)
+    local myRoot = getRoot()
+    if not myRoot then return false end
+
+    -- Grab all NPCs with quests
+    local questNPC = nil
     for _, npc in ipairs(workspace:GetDescendants()) do
-        if npc:IsA("Model") then
+        if npc:IsA("Model") and npc:FindFirstChild("HumanoidRootPart") then
             local nm = npc.Name
-            if nm:find("Quest") or nm:find(questInfo.island) then
-                local root = npc:FindFirstChild("HumanoidRootPart")
-                local myRoot = getRoot()
-                if root and myRoot then
-                    myRoot.CFrame = root.CFrame * CFrame.new(0, 0, Config.TPOffset)
-                    task.wait(0.4)
-                    local prompt = npc:FindFirstChildOfClass("ProximityPrompt")
-                    if prompt then
-                        fireproximityprompt(prompt)
-                        task.wait(0.3)
-                    end
-                    return true
-                end
+            if nm:find("Quest") or nm:find("Giver") or nm:find(questInfo.island) then
+                questNPC = npc
+                break
             end
+        end
+    end
+
+    if questNPC then
+        local root = questNPC:FindFirstChild("HumanoidRootPart")
+        if root then
+            myRoot.CFrame = root.CFrame * CFrame.new(0, 0, 5)
+            task.wait(0.5)
+            -- Try remote first (real path), fallback to ProximityPrompt
+            pcall(function()
+                CommF:Invoke("CommF_", { "Quest", questNPC.Name })
+            end)
+            task.wait(0.3)
+            local prompt = questNPC:FindFirstChildOfClass("ProximityPrompt")
+            if prompt then
+                pcall(function() fireproximityprompt(prompt) end)
+            end
+            return true
         end
     end
     return false
 end
 
 -- ═══════════════════════════════════════════════
--- MOB DETECTION
+-- TARGET DETECTION
 -- ═══════════════════════════════════════════════
-local function findMob(mobNames)
-    local closest, closestDist = nil, math.huge
+local function findTarget(mobNames)
     local myRoot = getRoot()
     if not myRoot then return nil end
 
+    local best, bestVal = nil, math.huge
+
+    -- Player targeting
+    if Config.TargetMode == "Player" then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LP and plr.Character then
+                local h = plr.Character:FindFirstChildOfClass("Humanoid")
+                local r = plr.Character:FindFirstChild("HumanoidRootPart")
+                if h and r and h.Health > 0 then
+                    local d = (r.Position - myRoot.Position).Magnitude
+                    if d < bestVal then best, bestVal = plr.Character, d end
+                end
+            end
+        end
+        return best, bestVal
+    end
+
+    -- Mob targeting
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") then
             local hum = obj:FindFirstChildOfClass("Humanoid")
@@ -212,30 +271,37 @@ local function findMob(mobNames)
                 end
                 if matched then
                     local d = (root.Position - myRoot.Position).Magnitude
-                    if d < closestDist then closest, closestDist = obj, d end
+                    if Config.TargetMode == "Lowest HP" then
+                        if hum.Health < bestVal then best, bestVal = obj, hum.Health end
+                    else
+                        if d < bestVal then best, bestVal = obj, d end
+                    end
                 end
             end
         end
     end
-    return closest, closestDist
+
+    return best, bestVal
 end
 
 -- ═══════════════════════════════════════════════
--- ATTACK
+-- TOOL + ATTACK (REAL PATH)
 -- ═══════════════════════════════════════════════
 local function equipToolForStyle(style)
     local char = LP.Character
-    if not char then return end
+    if not char then return nil end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return nil end
 
     local tool = nil
     for _, t in ipairs(char:GetChildren()) do
         if t:IsA("Tool") then
             local n = t.Name:lower()
-            if style == "Melee" and (n:find("combat") or n:find("black leg") or n:find("electro") or n:find("dragon talon") or n:find("superhuman") or n:find("death step")) then
+            if style == "Melee" and (n:find("combat") or n:find("black leg") or n:find("electro") or n:find("dragon talon") or n:find("superhuman") or n:find("death step") or n:find("sanguine")) then
                 tool = t
-            elseif style == "Sword" and (n:find("sword") or n:find("blade") or n:find("katana") or n:find("cutlass") or n:find("saber") or n:find("cursed dual")) then
+            elseif style == "Sword" and (n:find("sword") or n:find("blade") or n:find("katana") or n:find("cutlass") or n:find("saber") or n:find("cursed dual") or n:find("dark dagger") or n:find("trident")) then
                 tool = t
-            elseif style == "BloxFruit" and (n:find("fruit") or n:find("dragon") or n:find("kitsune") or n:find("leopard") or n:find("dough") or n:find("venom") or n:find("control")) then
+            elseif style == "BloxFruit" and (n:find("fruit") or n:find("dragon") or n:find("kitsune") or n:find("leopard") or n:find("dough") or n:find("venom") or n:find("control") or n:find("portal") or n:find("mammoth")) then
                 tool = t
             elseif style == "Gun" and (n:find("gun") or n:find("slingshot") or n:find("pistol") or n:find("rifle") or n:find("bizarre")) then
                 tool = t
@@ -248,50 +314,53 @@ local function equipToolForStyle(style)
             if t:IsA("Tool") then tool = t break end
         end
     end
-    if tool and tool.Parent ~= char then
-        pcall(function() tool.Parent = char end)
+    if tool and hum:GetChildren()[1] ~= tool then
+        pcall(function() hum:EquipTool(tool) end)
+        task.wait(0.05)
     end
+    return tool
 end
 
-local function fireSkills()
+local function realAttack(mob, tool)
+    if not mob or not tool then return end
+    local myRoot = getRoot()
+    local mobRoot = mob:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not mobRoot then return end
+
+    -- Face target
+    myRoot.CFrame = CFrame.lookAt(myRoot.Position, mobRoot.Position)
+
+    -- Mass damage: expand hitbox client-side (visual only, server validates)
+    if Config.MassDamage then
+        local char = LP.Character
+        if char then
+            for _, d in ipairs(char:GetDescendants()) do
+                if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then
+                    d.Size = Vector3.new(Config.MassRange, Config.MassRange, Config.MassRange)
+                end
+            end
+        end
+    end
+
+    -- REAL attack: Tool:Activate() goes through the game's own remote
+    pcall(function()
+        tool:Activate()
+    end)
+
+    -- Also send the game's M1 remote for Blox Fruits specifically
+    pcall(function()
+        CommF:Invoke("CommF_", { "Click" })
+    end)
+
+    -- Skills on Z/X/C/V/F
     for _, key in ipairs({"Z","X","C","V","F"}) do
         pcall(function()
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[key], false, game)
             task.wait(0.02)
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[key], false, game)
         end)
-        task.wait(0.08)
+        task.wait(0.06)
     end
-end
-
-local function attackMob(mob)
-    if not mob then return end
-    local myRoot = getRoot()
-    local mobRoot = mob:FindFirstChild("HumanoidRootPart")
-    if not myRoot or not mobRoot then return end
-
-    myRoot.CFrame = CFrame.lookAt(myRoot.Position, mobRoot.Position)
-    equipToolForStyle(Config.AttackStyle)
-
-    -- Mass-damage mode: expand hitbox client-side before firing
-    if Config.MassDamage then
-        local char = LP.Character
-        if char then
-            for _, d in ipairs(char:GetDescendants()) do
-                if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then
-                    d.Size = d.Size + Vector3.new(Config.MassRange, Config.MassRange, Config.MassRange)
-                end
-            end
-        end
-    end
-
-    pcall(function()
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        task.wait(0.01)
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-    end)
-
-    if Config.SkillCooldowns then fireSkills() end
 end
 
 -- ═══════════════════════════════════════════════
@@ -302,23 +371,23 @@ local function farmLoop()
         local mySession = State.Session
         local lv = getLevel()
         local questInfo = pickQuestForLevel(lv)
-        State.CurrentQuest = questInfo
 
         if Config.AutoQuest and not hasQuest() then
             acceptQuest(questInfo)
             task.wait(1)
         end
 
-        local mob, dist = findMob(questInfo.mobs)
+        local mob, dist = findTarget(questInfo.mobs)
         if mob then
             State.Target = mob
             local myRoot = getRoot()
             local mobRoot = mob:FindFirstChild("HumanoidRootPart")
-            if myRoot and mobRoot and dist > 8 then
+            if myRoot and mobRoot and dist > 12 then
                 local dir = (mobRoot.Position - myRoot.Position).Unit
-                myRoot.CFrame = myRoot.CFrame + dir * math.min(dist - 4, 15)
+                myRoot.CFrame = myRoot.CFrame + dir * math.min(dist - 8, 15)
             end
-            attackMob(mob)
+            local tool = equipToolForStyle(Config.AttackStyle)
+            realAttack(mob, tool)
         elseif Config.BringMobs then
             local myRoot = getRoot()
             if myRoot then
@@ -343,56 +412,46 @@ local function farmLoop()
             end
         end
 
-        if Config.AutoNextQuest then
-            local newLv = getLevel()
-            if newLv > lv then
-                notify("Blox Farm", "Level up! " .. newLv, 2)
-            end
-        end
-
         if State.Session ~= mySession then break end
-        task.wait(Config.AutoClickDelay)
+        task.wait(Config.AttackDelay)
     end
 end
 
 -- ═══════════════════════════════════════════════
--- UI (minimizable)
+-- UI (scrollable, categorized)
 -- ═══════════════════════════════════════════════
-local UI = {}
-
 local function createUI()
     local g = Instance.new("ScreenGui")
-    g.Name = "KAKU_BloxFarm2026"
+    g.Name = "KAKU_BloxFarm_v4"
     g.ResetOnSpawn = false
     g.Parent = LP:WaitForChild("PlayerGui")
-    UI.ScreenGui = g
 
     local Main = Instance.new("Frame")
-    Main.Size = UDim2.new(0, 270, 0, 460)
-    Main.Position = UDim2.new(0, 20, 0, 80)
-    Main.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
+    Main.Size = UDim2.new(0, 300, 0, 460)
+    Main.Position = UDim2.new(0, 20, 0, 60)
+    Main.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
     Main.BorderSizePixel = 0
     Main.Active = true
     Main.Draggable = true
     Main.Parent = g
-    UI.Main = Main
-    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
+    -- Title bar
     local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, 0, 0, 38)
-    Title.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
-    Title.Text = "  KAKU Blox Farm 2026"
-    Title.TextColor3 = Color3.fromRGB(230, 230, 245)
+    Title.Size = UDim2.new(1, 0, 0, 42)
+    Title.BackgroundColor3 = Color3.fromRGB(24, 24, 34)
+    Title.Text = "  KAKU v4 — Blox Farm"
+    Title.TextColor3 = Color3.fromRGB(240, 240, 255)
     Title.Font = Enum.Font.GothamBold
     Title.TextSize = 15
     Title.TextXAlignment = Enum.TextXAlignment.Left
     Title.Parent = Main
-    Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
 
-    -- Minimize button
+    -- Minimize
     local Min = Instance.new("TextButton")
-    Min.Size = UDim2.new(0, 30, 0, 30)
-    Min.Position = UDim2.new(1, -36, 0, 4)
+    Min.Size = UDim2.new(0, 28, 0, 28)
+    Min.Position = UDim2.new(1, -96, 0, 7)
     Min.BackgroundColor3 = Color3.fromRGB(50, 50, 68)
     Min.Text = "—"
     Min.TextColor3 = Color3.fromRGB(220, 220, 240)
@@ -401,28 +460,10 @@ local function createUI()
     Min.Parent = Title
     Instance.new("UICorner", Min).CornerRadius = UDim.new(0, 6)
 
-    -- Content container
-    local Body = Instance.new("Frame")
-    Body.Size = UDim2.new(1, 0, 1, -38)
-    Body.Position = UDim2.new(0, 0, 0, 38)
-    Body.BackgroundTransparency = 1
-    Body.Parent = Main
-    UI.Body = Body
-
-    -- Minimize toggle
-    local minState = false
-    Min.MouseButton1Click:Connect(function()
-        minState = not minState
-        Config.Minimized = minState
-        Body.Visible = not minState
-        Main.Size = minState and UDim2.new(0, 270, 0, 38) or UDim2.new(0, 270, 0, 460)
-        Min.Text = minState and "+" or "—"
-    end)
-
-    -- Close button
+    -- Close
     local Close = Instance.new("TextButton")
-    Close.Size = UDim2.new(0, 30, 0, 30)
-    Close.Position = UDim2.new(1, -70, 0, 4)
+    Close.Size = UDim2.new(0, 28, 0, 28)
+    Close.Position = UDim2.new(1, -34, 0, 7)
     Close.BackgroundColor3 = Color3.fromRGB(140, 40, 40)
     Close.Text = "X"
     Close.TextColor3 = Color3.fromRGB(255, 220, 220)
@@ -431,59 +472,74 @@ local function createUI()
     Close.Parent = Title
     Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 6)
 
-    Close.MouseButton1Click:Connect(function()
-        g.Enabled = false
-        UI.Closed = true
-    end)
+    -- Scroll container (this is what makes it scrollable)
+    local Scroll = Instance.new("ScrollingFrame")
+    Scroll.Size = UDim2.new(1, 0, 1, -80)
+    Scroll.Position = UDim2.new(0, 0, 0, 44)
+    Scroll.BackgroundTransparency = 1
+    Scroll.BorderSizePixel = 0
+    Scroll.ScrollBarThickness = 6
+    Scroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 110)
+    Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Scroll.Parent = Main
 
-    -- Floating reopen button (appears when closed)
-    local Reopen = Instance.new("TextButton")
-    Reopen.Size = UDim2.new(0, 50, 0, 50)
-    Reopen.Position = UDim2.new(0, 20, 0, 80)
-    Reopen.BackgroundColor3 = Color3.fromRGB(40, 160, 90)
-    Reopen.Text = "KAKU"
-    Reopen.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Reopen.Font = Enum.Font.GothamBold
-    Reopen.TextSize = 12
-    Reopen.Visible = false
-    Reopen.Parent = g
-    Instance.new("UICorner", Reopen).CornerRadius = UDim.new(0, 25)
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 6)
+    Layout.SortOrder = Enum.SortOrder.LayoutOrder
+    Layout.Parent = Scroll
 
-    Reopen.MouseButton1Click:Connect(function()
-        g.Enabled = true
-        UI.Closed = false
-        Reopen.Visible = false
-    end)
+    local Pad = Instance.new("UIPadding")
+    Pad.PaddingTop = UDim.new(0, 8)
+    Pad.PaddingLeft = UDim.new(0, 8)
+    Pad.PaddingRight = UDim.new(0, 8)
+    Pad.PaddingBottom = UDim.new(0, 8)
+    Pad.Parent = Scroll
 
-    -- Hide reopen when gui is enabled
-    g:GetPropertyChangedSignal("Enabled"):Connect(function()
-        Reopen.Visible = not g.Enabled
-    end)
+    -- Credit footer
+    local Credit = Instance.new("TextLabel")
+    Credit.Size = UDim2.new(1, 0, 0, 22)
+    Credit.Position = UDim2.new(0, 0, 1, -24)
+    Credit.BackgroundTransparency = 1
+    Credit.Text = "made by kairo.v4"
+    Credit.TextColor3 = Color3.fromRGB(140, 140, 170)
+    Credit.Font = Enum.Font.GothamMedium
+    Credit.TextSize = 11
+    Credit.Parent = Main
 
-    -- Button factory
-    local yPos = 10
-    local function makeButton(text, onClick, color)
+    -- UI builders
+    local function makeCategory(text)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 24)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = "  " .. text
+        lbl.TextColor3 = Color3.fromRGB(120, 200, 255)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.LayoutOrder = 1
+        lbl.Parent = Scroll
+    end
+
+    local function makeButton(text, callback, color)
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.9, 0, 0, 36)
-        btn.Position = UDim2.new(0.05, 0, 0, yPos)
-        btn.BackgroundColor3 = color or Color3.fromRGB(45, 45, 60)
+        btn.Size = UDim2.new(1, 0, 0, 34)
+        btn.BackgroundColor3 = color or Color3.fromRGB(40, 40, 56)
         btn.Text = text
         btn.TextColor3 = Color3.fromRGB(230, 230, 245)
         btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 13
-        btn.Parent = Body
+        btn.TextSize = 12
+        btn.Parent = Scroll
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-        yPos = yPos + 42
-        btn.MouseButton1Click:Connect(onClick)
+        btn.MouseButton1Click:Connect(callback)
         return btn
     end
 
     local function makeToggle(text, default, onChange)
         local row = Instance.new("Frame")
-        row.Size = UDim2.new(0.9, 0, 0, 30)
-        row.Position = UDim2.new(0.05, 0, 0, yPos)
+        row.Size = UDim2.new(1, 0, 0, 30)
         row.BackgroundTransparency = 1
-        row.Parent = Body
+        row.Parent = Scroll
 
         local lbl = Instance.new("TextLabel")
         lbl.Size = UDim2.new(0.7, 0, 1, 0)
@@ -496,8 +552,8 @@ local function createUI()
         lbl.Parent = row
 
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.25, 0, 0.85, 0)
-        btn.Position = UDim2.new(0.75, 0, 0.075, 0)
+        btn.Size = UDim2.new(0.24, 0, 0.85, 0)
+        btn.Position = UDim2.new(0.76, 0, 0.075, 0)
         btn.BackgroundColor3 = default and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(70, 70, 85)
         btn.Text = default and "ON" or "OFF"
         btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -513,55 +569,133 @@ local function createUI()
             btn.Text = s and "ON" or "OFF"
             onChange(s)
         end)
-        yPos = yPos + 34
         return btn
     end
 
-    -- Start/Stop
-    local Toggle = makeButton("START FARM", function() end, Color3.fromRGB(40, 160, 90))
-    Toggle.MouseButton1Click:Connect(function()
+    local function makeDropdown(text, options, onChange)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 34)
+        row.BackgroundTransparency = 1
+        row.Parent = Scroll
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 1, 0)
+        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+        btn.Text = text .. ": " .. options[1]
+        btn.TextColor3 = Color3.fromRGB(230, 230, 245)
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 12
+        btn.Parent = row
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+        local idx = 1
+        btn.MouseButton1Click:Connect(function()
+            idx = idx % #options + 1
+            btn.Text = text .. ": " .. options[idx]
+            onChange(options[idx])
+        end)
+        return btn
+    end
+
+    -- ─── FARM CATEGORY ───
+    makeCategory("FARM")
+    local StartBtn = makeButton("START FARM", function() end, Color3.fromRGB(40, 160, 90))
+    StartBtn.MouseButton1Click:Connect(function()
         State.Running = not State.Running
         if State.Running then
             State.Session = State.Session + 1
-            Toggle.Text = "STOP FARM"
-            Toggle.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-            notify("KAKU", "Farm ON. Lv " .. getLevel(), 2)
+            StartBtn.Text = "STOP FARM"
+            StartBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+            notify("KAKU v4", "Farm ON. Lv " .. getLevel(), 2)
             task.spawn(farmLoop)
         else
-            Toggle.Text = "START FARM"
-            Toggle.BackgroundColor3 = Color3.fromRGB(40, 160, 90)
-            notify("KAKU", "Farm OFF.", 2)
+            StartBtn.Text = "START FARM"
+            StartBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 90)
+            notify("KAKU v4", "Farm OFF.", 2)
         end
     end)
 
-    -- Attack style cycle
-    local Styles = {"Melee", "Sword", "BloxFruit", "Gun"}
-    local si = 1
-    for i, s in ipairs(Styles) do if s == Config.AttackStyle then si = i end end
-    local StyleBtn = makeButton("Style: " .. Config.AttackStyle, function()
-        si = si % #Styles + 1
-        Config.AttackStyle = Styles[si]
-        StyleBtn.Text = "Style: " .. Config.AttackStyle
-    end)
+    makeDropdown("Style", {"Melee","Sword","BloxFruit","Gun"}, function(v) Config.AttackStyle = v end)
+    makeDropdown("Target", {"Nearest","Lowest HP","Player"}, function(v) Config.TargetMode = v end)
 
-    -- Toggles
-    makeToggle("Auto Quest",        Config.AutoQuest,       function(v) Config.AutoQuest = v end)
-    makeToggle("Auto Next Quest",   Config.AutoNextQuest,   function(v) Config.AutoNextQuest = v end)
-    makeToggle("Bring Mobs",        Config.BringMobs,       function(v) Config.BringMobs = v end)
-    makeToggle("Mass Damage",       Config.MassDamage,      function(v) Config.MassDamage = v end)
-    makeToggle("Walk on Water",     Config.WalkOnWater,     function(v)
+    -- ─── QUEST CATEGORY ───
+    makeCategory("QUEST")
+    makeToggle("Auto Quest",       Config.AutoQuest,    function(v) Config.AutoQuest = v end)
+    makeToggle("Auto Next Quest",  Config.AutoNextQuest,function(v) Config.AutoNextQuest = v end)
+
+    -- ─── COMBAT CATEGORY ───
+    makeCategory("COMBAT")
+    makeToggle("Bring Mobs",  Config.BringMobs,  function(v) Config.BringMobs = v end)
+    makeToggle("Mass Damage", Config.MassDamage, function(v) Config.MassDamage = v end)
+    makeToggle("Skills",      true,              function(v) Config.SkillCooldowns = v end)
+
+    -- ─── MOVEMENT CATEGORY ───
+    makeCategory("MOVEMENT")
+    makeToggle("Walk on Water", Config.WalkOnWater, function(v)
         Config.WalkOnWater = v
         applyWalkOnWater()
     end)
-    makeToggle("Speed (120)",       false,                  function(v)
-        Config._SpeedOn = v
+    makeToggle("Speed (120)",   Config.SpeedOn,     function(v)
+        Config.SpeedOn = v
         applySpeed()
     end)
-    makeToggle("Safe Teleport",     Config.SafeTP,          function(v) Config.SafeTP = v end)
+    makeToggle("Safe Teleport", Config.SafeTP,      function(v) Config.SafeTP = v end)
+
+    -- ─── TELEPORT CATEGORY ───
+    makeCategory("TELEPORT")
+    local locNames = {}
+    for k, _ in pairs(TeleportLocations) do table.insert(locNames, k) end
+    table.sort(locNames)
+
+    local selectedLoc = locNames[1]
+    makeDropdown("Location", locNames, function(v) selectedLoc = v end)
+    makeButton("Teleport Now", function()
+        local pos = TeleportLocations[selectedLoc]
+        if pos then
+            notify("KAKU v4", "Teleporting to " .. selectedLoc, 2)
+            task.spawn(function() teleportTo(pos) end)
+        end
+    end, Color3.fromRGB(60, 100, 180))
+
+    -- ─── MINIMIZE / CLOSE HOOKS ───
+    local minState = false
+    Min.MouseButton1Click:Connect(function()
+        minState = not minState
+        Scroll.Visible = not minState
+        Credit.Visible = not minState
+        Main.Size = minState and UDim2.new(0, 300, 0, 42) or UDim2.new(0, 300, 0, 460)
+        Min.Text = minState and "+" or "—"
+    end)
+
+    Close.MouseButton1Click:Connect(function()
+        g.Enabled = false
+    end)
+
+    -- Floating reopen
+    local Reopen = Instance.new("TextButton")
+    Reopen.Size = UDim2.new(0, 52, 0, 52)
+    Reopen.Position = UDim2.new(0, 20, 0, 60)
+    Reopen.BackgroundColor3 = Color3.fromRGB(40, 160, 90)
+    Reopen.Text = "KAKU"
+    Reopen.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Reopen.Font = Enum.Font.GothamBold
+    Reopen.TextSize = 12
+    Reopen.Visible = false
+    Reopen.Parent = g
+    Instance.new("UICorner", Reopen).CornerRadius = UDim.new(0, 26)
+
+    Reopen.MouseButton1Click:Connect(function()
+        g.Enabled = true
+        Reopen.Visible = false
+    end)
+
+    g:GetPropertyChangedSignal("Enabled"):Connect(function()
+        Reopen.Visible = not g.Enabled
+    end)
 end
 
 -- ═══════════════════════════════════════════════
--- CHARACTER RESPAWN HOOK
+-- RESPAWN HOOK
 -- ═══════════════════════════════════════════════
 LP.CharacterAdded:Connect(function()
     task.wait(2)
@@ -573,4 +707,4 @@ end)
 -- BOOT
 -- ═══════════════════════════════════════════════
 createUI()
-notify("KAKU Blox Farm 2026", "Loaded. Lv " .. getLevel(), 3)
+notify("KAKU v4", "Loaded. Lv " .. getLevel(), 3)
